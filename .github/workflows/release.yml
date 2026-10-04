@@ -59,7 +59,10 @@ jobs:
         if: steps.version.outputs.release == 'true'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
+          # A personal access token makes the release show under the owner's name instead of
+          # github-actions[bot]. Fine-grained PAT, this repo only, Contents: read and write.
+          # Falls back to the workflow token when the secret isn't set.
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "v$env:VERSION" "ShutdownTimer-v$env:VERSION-win-x64.exe" `
