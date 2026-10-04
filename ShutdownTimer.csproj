@@ -9,6 +9,8 @@
     <!-- ThemeMode (Fluent theme + Mica backdrop) is marked experimental in .NET 9. -->
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
     <ApplicationIcon>brand\shutdown-timer.ico</ApplicationIcon>
+    <!-- A MAJOR bump merged to main publishes a GitHub Release with the exe (.github/workflows/release.yml). -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
