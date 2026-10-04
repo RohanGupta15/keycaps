@@ -1,0 +1,69 @@
+# Publishes ShutdownTimer.exe as a GitHub Release whenever the MAJOR part of <Version> in
+# ShutdownTimer.csproj goes above the highest released vN.x.x tag. Minor/patch bumps don't release.
+#
+# To ship a release: bump <Version> to the next major (e.g. 1.4.2 -> 2.0.0) and merge to main.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [ShutdownTimer.csproj]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # tags are needed to find the latest released major
+
+      - name: Decide whether this is a major bump
+        id: version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content ShutdownTimer.csproj)).SelectSingleNode('//Version').InnerText
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+              throw "<Version> in ShutdownTimer.csproj must be MAJOR.MINOR.PATCH, got '$version'"
+          }
+          $major = [int]$version.Split('.')[0]
+          $released = @(git tag --list 'v*' | ForEach-Object { if ($_ -match '^v(\d+)\.\d+\.\d+$') { [int]$Matches[1] } })
+          $latest = if ($released.Count) { ($released | Measure-Object -Maximum).Maximum } else { 0 }
+          $release = $major -gt $latest
+          Write-Host "csproj version $version (major $major); highest released major $latest; release: $release"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "release=$($release.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+
+      - name: Set up .NET
+        if: steps.version.outputs.release == 'true'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Publish exe
+        if: steps.version.outputs.release == 'true'
+        shell: pwsh
+        run: |
+          dotnet publish ShutdownTimer.csproj -c Release -r win-x64 --self-contained false `
+            -p:PublishSingleFile=true -o publish
+          Copy-Item publish/ShutdownTimer.exe "ShutdownTimer-v${{ steps.version.outputs.version }}-win-x64.exe"
+
+      - name: Create GitHub Release
+        if: steps.version.outputs.release == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$env:VERSION" "ShutdownTimer-v$env:VERSION-win-x64.exe" `
+            --target "$env:GITHUB_SHA" `
+            --title "Shutdown Timer v$env:VERSION" `
+            --notes "Requires the [.NET 9 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/9.0) (x64)." `
+            --generate-notes
