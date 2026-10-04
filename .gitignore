@@ -1,0 +1,11 @@
+# Build output (rebuild with dotnet build / dotnet publish)
+bin/
+obj/
+publish/
+
+# IDE / user state
+.vs/
+*.user
+
+# Python caches from brand/build scripts
+__pycache__/

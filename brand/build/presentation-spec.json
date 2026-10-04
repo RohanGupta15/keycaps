@@ -1,0 +1,39 @@
+{
+  "brand": "Shutdown Timer",
+  "tagline": "Turn off your PC at the time you choose",
+  "brief": "A small, native-feeling Windows 11 utility that shuts the PC down at a clock time. It may grow into a suite of single-purpose utilities (like PowerToys), so the mark must also work as a system: every future tool is a key with its own glyph and hue.",
+  "adjectives": ["native", "quiet", "precise", "dependable", "lightweight"],
+  "criteria": "Success: reads as power + time without a label, holds at 16 px in the taskbar, passes 3:1 on light and dark themes, and extends to a family of tool icons.",
+  "industry": "software",
+  "brand_color": "#6468DC",
+  "tile_color": "#202020",
+  "greyscale": false,
+  "final": true,
+  "deck_title": "final identity",
+  "designer": "Rohan Gupta",
+  "concepts": [
+    {
+      "name": "Keycap",
+      "symbol": "../shutdown-timer-symbol.svg",
+      "lockup": "../shutdown-timer-horizontal-light.svg",
+      "stacked": "../shutdown-timer-stacked-light.svg",
+      "symbol_on_tile": "../shutdown-timer-symbol.svg",
+      "symbol_on_dark": "../shutdown-timer-symbol.svg",
+      "lockup_on_dark": "../shutdown-timer-horizontal-dark.svg",
+      "stacked_on_dark": "../shutdown-timer-stacked-dark.svg",
+      "idea": "Every utility is a key you press once; this key's glyph is a power symbol read as a clock at 3:00.",
+      "rationale": [
+        "Literal metaphor, as Microsoft's app-icon guidance asks: power + time, no letters",
+        "Suite-ready: future tools share the key and white glyph, each with its own hue",
+        "Pixel-fitted 16 px cut for the taskbar and title bar; face passes 3:1 on both themes",
+        "Selawik Semibold wordmark (OFL, Microsoft's open Segoe UI companion), outlined"
+      ]
+    }
+  ],
+  "recommendation": "Keycap: a family system from day one, with a literal, legible Shutdown Timer key.",
+  "next_steps": [
+    "Use shutdown-timer.ico for the app (already wired in)",
+    "Give each future tool its own key: same shape, white glyph, a hue from the contrast band",
+    "Design the suite key once the suite has a name"
+  ]
+}
