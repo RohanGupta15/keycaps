@@ -1,8 +1,9 @@
-using System.Diagnostics;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -11,35 +12,50 @@ using Microsoft.Win32;
 
 namespace ShutdownTimer;
 
-// Schedules the shutdown with Windows' own `shutdown /s /t <seconds>`, so the
-// shutdown still happens after this app is closed. The chosen time is saved to
-// disk only so the app can show it again when reopened.
+// Schedules the shutdown with Windows' own `shutdown /s /t <seconds>`, so it still happens if this
+// app is closed. While a shutdown is pending the app also keeps the PC awake (from the tray), and
+// because Windows' countdown pauses while the PC sleeps, it re-checks the wall clock after every
+// resume and corrects the countdown (see ShutdownPlanner).
 public partial class MainWindow : Window
 {
-    static readonly string StateFile = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ShutdownTimer", "scheduled.txt");
+    static string StateFile => Path.Combine(ShutdownCommand.DataFolder, "scheduled.txt");
 
     const double RingSize = 232, RingStroke = 8;
 
+    /// <summary>A gap this long between 1-second ticks means the PC (or this process) was suspended.</summary>
+    static readonly TimeSpan ResumeGap = TimeSpan.FromSeconds(5);
+
     readonly DispatcherTimer tick = new() { Interval = TimeSpan.FromSeconds(1) };
+    readonly KeepAwake keepAwake = new();
+    readonly TrayIcon tray;
 
     int hour12 = 3;   // 1..12
     int minute;       // 0..59
     bool pm;
     DateTime? scheduledAt;
     DateTime scheduledFrom;   // when it was scheduled, for the progress ring
+    DateTime? lateFor;        // original target, while running a late shutdown after sleep
+    DateTime lastTickUtc = DateTime.UtcNow;
+    bool exiting;
 
     public MainWindow()
     {
         InitializeComponent();
 
-        tick.Tick += (_, _) => Refresh();
+        tray = new TrayIcon(ShowFromTray, CancelShutdown, ExitApp);
+
+        tick.Tick += (_, _) => OnTick();
         tick.Start();
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
         LoadState();
+        if (scheduledAt is not null)
+            Resync();   // the PC may have slept, or restarted, while the app was closed
         Refresh();
     }
+
+    // Windows' last boot time. The tick count keeps counting through sleep, so this stays stable.
+    static DateTime LastBoot => DateTime.Now - TimeSpan.FromMilliseconds(Environment.TickCount64);
 
     // ---------- Mica window chrome ----------
 
@@ -94,7 +110,11 @@ public partial class MainWindow : Window
             SetResourceReference(BackgroundProperty, "ApplicationBackgroundBrush"); // pre-22H2: solid fallback
 
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
-        Closed += (_, _) => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        Closed += (_, _) =>
+        {
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        };
     }
 
     void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
@@ -171,11 +191,31 @@ public partial class MainWindow : Window
 
     // ---------- Display ----------
 
+    void OnTick()
+    {
+        var nowUtc = DateTime.UtcNow;
+        var gap = nowUtc - lastTickUtc;
+        lastTickUtc = nowUtc;
+
+        // Works even when Windows doesn't send this app a resume notification (Modern Standby).
+        if (gap > ResumeGap && scheduledAt is not null)
+            Resync();
+        // Safety net: Windows should have shut down by now, so its countdown was off.
+        else if (scheduledAt is { } at && DateTime.Now - at > TimeSpan.FromSeconds(15))
+            Resync();
+
+        Refresh();
+    }
+
+    void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e) => Dispatcher.BeginInvoke(() =>
+    {
+        if (e.Mode == PowerModes.Resume && scheduledAt is not null)
+            Resync();
+        Refresh();   // StatusChange: plugged in or unplugged
+    });
+
     void Refresh()
     {
-        if (scheduledAt is { } at && at <= DateTime.Now)
-            ClearState();
-
         HourText.Text = hour12.ToString("00", CultureInfo.InvariantCulture);
         MinuteText.Text = minute.ToString("00", CultureInfo.InvariantCulture);
         AmPmText.Text = pm ? "PM" : "AM";
@@ -190,16 +230,34 @@ public partial class MainWindow : Window
 
             var left = t - DateTime.Now;
             CountdownText.Text = FormatCountdown(left);
-            TargetText.Text = $"{t.ToString("h:mm tt", CultureInfo.InvariantCulture)} · {DayWord(t)}";
+            TargetText.Text = $"{Clock(t)} · {DayWord(t)}";
 
             var total = (t - scheduledFrom).TotalSeconds;
             ProgressArc.Data = RingArc(total > 0 ? left.TotalSeconds / total : 1);
+
+            ScheduledTitle.Text = lateFor is null ? "Shutdown scheduled" : "Shutting down";
+            if (lateFor is { } missed)
+                SetAwakeStatus("", $"Your PC was asleep at {Clock(missed)}", caution: false);
+            else if (SystemParameters.PowerLineStatus == PowerLineStatus.Offline)
+                SetAwakeStatus("", "On battery: plug in so your PC stays awake", caution: true);
+            else if (keepAwake.IsHeld)
+                SetAwakeStatus("", "Keeping your PC awake until then", caution: false);
+            else
+                SetAwakeStatus("", "Couldn't keep your PC awake", caution: true);
         }
         else
         {
             IdlePanel.Visibility = Visibility.Visible;
             ScheduledPanel.Visibility = Visibility.Collapsed;
         }
+    }
+
+    void SetAwakeStatus(string glyph, string text, bool caution)
+    {
+        AwakeIcon.Text = glyph;
+        AwakeText.Text = text;
+        AwakeIcon.SetResourceReference(TextBlock.ForegroundProperty,
+            caution ? "SystemFillColorCautionBrush" : "TextFillColorSecondaryBrush");
     }
 
     // Clockwise arc from 12 o'clock covering `fraction` of the ring (the time remaining).
@@ -218,6 +276,8 @@ public partial class MainWindow : Window
         return geometry;
     }
 
+    static string Clock(DateTime t) => t.ToString("h:mm tt", CultureInfo.InvariantCulture);
+
     static string DayWord(DateTime t) =>
         t.Date == DateTime.Today ? "Today" :
         t.Date == DateTime.Today.AddDays(1) ? "Tomorrow" :
@@ -229,13 +289,9 @@ public partial class MainWindow : Window
     {
         var now = DateTime.Now;
         var target = NextOccurrence();
-        var seconds = (int)Math.Ceiling((target - now).TotalSeconds);
 
-        // Replace any shutdown that is already pending (this fails harmlessly if none is).
-        RunShutdown("/a");
-
-        var label = target.ToString("h:mm tt", CultureInfo.InvariantCulture);
-        var (code, output) = RunShutdown($"/s /t {seconds} /c \"Scheduled shutdown at {label} (Shutdown Timer).\"");
+        ShutdownCommand.Abort();   // replace any shutdown that is already pending
+        var (code, output) = ShutdownCommand.Schedule(target - now, target);
         if (code != 0)
         {
             MessageBox.Show(this, $"Windows refused to schedule the shutdown (code {code}).\n\n{output}",
@@ -245,30 +301,126 @@ public partial class MainWindow : Window
 
         scheduledAt = target;
         scheduledFrom = now;
+        lateFor = null;
+        MissedBar.Visibility = Visibility.Collapsed;
         SaveState();
-        Refresh();
+        OnScheduleChanged();
     }
 
-    void Cancel_Click(object sender, RoutedEventArgs e)
+    void Cancel_Click(object sender, RoutedEventArgs e) => CancelShutdown();
+
+    void CancelShutdown()
     {
-        RunShutdown("/a");
+        ShutdownCommand.Abort();
         ClearState();
+        OnScheduleChanged();
+    }
+
+    /// <summary>
+    /// Brings Windows' countdown back in line with the wall clock. Called after the PC resumes, when
+    /// the app starts with a saved schedule, and when the target is overdue.
+    /// </summary>
+    void Resync()
+    {
+        if (scheduledAt is not { } target)
+            return;
+
+        var now = DateTime.Now;
+        var plan = ShutdownPlanner.Decide(now, target, LastBoot);
+        switch (plan.Action)
+        {
+            case PlanAction.Rearm:
+                ShutdownCommand.Abort();
+                ShutdownCommand.Schedule(plan.Delay, target);
+                break;
+
+            case PlanAction.ShutDownSoon:
+                // Missed by a little while asleep: shut down after a warning the user can cancel.
+                ShutdownCommand.Abort();
+                var soon = now + plan.Delay;
+                ShutdownCommand.Schedule(plan.Delay, soon);
+                lateFor ??= target;
+                scheduledAt = soon;
+                scheduledFrom = now;
+                SaveState();
+                ShowFromTray();
+                break;
+
+            case PlanAction.Missed:
+                // Too late to surprise the user with a shutdown: cancel the stale countdown and say so.
+                ShutdownCommand.Abort();
+                ClearState();
+                var missed = lateFor ?? target;
+                var when = missed.Date == DateTime.Today ? "today"
+                    : missed.Date == DateTime.Today.AddDays(-1) ? "yesterday"
+                    : "on " + missed.ToString("dddd", CultureInfo.CurrentCulture);
+                MissedText.Text = $"Your PC was asleep at {Clock(missed)} {when}, so it didn't shut down.";
+                MissedBar.Visibility = Visibility.Visible;
+                ShowFromTray();
+                break;
+
+            case PlanAction.AlreadyDone:
+                // Windows restarted after the target: the shutdown happened. Just forget it.
+                ClearState();
+                break;
+        }
+        OnScheduleChanged();
+    }
+
+    /// <summary>Keep-awake request and tray icon follow whether a shutdown is pending.</summary>
+    void OnScheduleChanged()
+    {
+        if (scheduledAt is { } t)
+        {
+            keepAwake.Hold($"Shutdown Timer: keeping the PC awake for a shutdown at {Clock(t)}");
+            tray.Show($"Shutdown at {Clock(t)}");
+        }
+        else
+        {
+            lateFor = null;
+            keepAwake.Release();
+            tray.Hide();
+        }
         Refresh();
     }
 
-    static (int code, string output) RunShutdown(string args)
+    void DismissMissed_Click(object sender, RoutedEventArgs e) => MissedBar.Visibility = Visibility.Collapsed;
+
+    // ---------- Window and tray ----------
+
+    protected override void OnClosing(CancelEventArgs e)
     {
-        var psi = new ProcessStartInfo("shutdown.exe", args)
+        // Closing with a shutdown pending hides to the tray, so the PC stays awake until then.
+        if (!exiting && scheduledAt is not null)
         {
-            CreateNoWindow = true,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        using var p = Process.Start(psi)!;
-        var output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
-        p.WaitForExit();
-        return (p.ExitCode, output.Trim());
+            e.Cancel = true;
+            Hide();
+            tray.Notify("Shutdown Timer is still running",
+                $"It's keeping your PC awake until {Clock(scheduledAt.Value)}. Open it from the tray to cancel.");
+            return;
+        }
+        base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        keepAwake.Dispose();
+        tray.Dispose();
+        base.OnClosed(e);
+    }
+
+    public void ShowFromTray()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    void ExitApp()
+    {
+        exiting = true;
+        Close();
     }
 
     // ---------- Persistence: "<scheduledAt>|<scheduledFrom>" ----------
@@ -278,9 +430,12 @@ public partial class MainWindow : Window
         try
         {
             var parts = File.ReadAllText(StateFile).Trim().Split('|');
-            if (!TryParseDate(parts[0], out var at) || at <= DateTime.Now)
+            if (!TryParseDate(parts[0], out var at))
+            {
+                ClearState();
                 return;
-
+            }
+            // Past targets are kept too: Resync decides whether they were done, are due, or were missed.
             scheduledAt = at;
             scheduledFrom = parts.Length > 1 && TryParseDate(parts[1], out var from) ? from : DateTime.Now;
             SetPicked(at);

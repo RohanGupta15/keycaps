@@ -5,6 +5,8 @@
     <TargetFramework>net9.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
+    <!-- Only for the tray icon (NotifyIcon); WPF has none. -->
+    <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- ThemeMode (Fluent theme + Mica backdrop) is marked experimental in .NET 9. -->
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
@@ -15,6 +17,16 @@
 
   <ItemGroup>
     <Resource Include="brand\shutdown-timer.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Keep WinForms/Drawing types out of the global namespace so WPF names stay unambiguous. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+    <!-- The test project lives below this folder; don't compile it into the app. -->
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Page Remove="tests\**" />
   </ItemGroup>
 
 </Project>

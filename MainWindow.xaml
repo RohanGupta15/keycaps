@@ -183,6 +183,30 @@
 
             <!-- Not scheduled: pick a time -->
             <StackPanel x:Name="IdlePanel">
+                <!-- Fluent InfoBar (caution): a shutdown didn't run because the PC was asleep -->
+                <Border x:Name="MissedBar" Visibility="Collapsed" Margin="0,0,0,12" Padding="16,12,8,12"
+                        CornerRadius="8" BorderThickness="1"
+                        Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Left" Width="16" Height="16" Margin="0,2,12,0" VerticalAlignment="Top">
+                            <Ellipse Fill="{DynamicResource SystemFillColorCautionBrush}" />
+                            <TextBlock Text="!" FontSize="11" FontWeight="Bold" Foreground="Black"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1" />
+                        </Grid>
+                        <Button DockPanel.Dock="Right" Style="{StaticResource CaptionButton}" Width="32" Height="32"
+                                VerticalAlignment="Top" Margin="8,-6,0,0" Content="&#xE8BB;" ToolTip="Dismiss"
+                                WindowChrome.IsHitTestVisibleInChrome="False" Click="DismissMissed_Click" />
+                        <StackPanel>
+                            <TextBlock Text="Shutdown skipped" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock x:Name="MissedText" TextWrapping="Wrap" FontSize="13" Margin="0,2,0,0"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="Your PC was asleep at 3:00 AM, so it didn't shut down." />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock Text="Shut down at" Style="{StaticResource SectionLabel}" />
@@ -233,13 +257,22 @@
                         <TextBlock Text="Schedule shutdown" FontSize="14" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+
+                <!-- Honest limitation, in the spirit of the Clock app's "only if the PC is awake" note -->
+                <DockPanel Margin="4,14,4,0">
+                    <TextBlock DockPanel.Dock="Left" Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="12"
+                               Margin="0,2,8,0" VerticalAlignment="Top"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                               Text="Your PC has to be awake to shut down. Shutdown Timer keeps it awake while it's plugged in, but closing the lid or choosing Sleep will delay the shutdown." />
+                </DockPanel>
             </StackPanel>
 
             <!-- Scheduled: countdown ring -->
             <StackPanel x:Name="ScheduledPanel" Visibility="Collapsed">
                 <Border Style="{StaticResource Card}" Padding="24,20,24,28">
                     <StackPanel>
-                        <TextBlock Text="Shutdown scheduled" Style="{StaticResource SectionLabel}" />
+                        <TextBlock x:Name="ScheduledTitle" Text="Shutdown scheduled" Style="{StaticResource SectionLabel}" />
 
                         <Grid Width="232" Height="232" Margin="0,16,0,0" HorizontalAlignment="Center">
                             <Ellipse Stroke="{DynamicResource ControlStrongStrokeColorDefaultBrush}" Opacity="0.35"
@@ -256,6 +289,16 @@
                                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                         </Grid>
+
+                        <!-- Keep-awake status: plugged in / on battery / late shutdown after sleep -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+                            <TextBlock x:Name="AwakeIcon" Text="&#xE73E;" FontFamily="{StaticResource IconFont}"
+                                       FontSize="12" Margin="0,1,8,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <TextBlock x:Name="AwakeText" FontSize="13" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="Keeping your PC awake until then" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -274,7 +317,7 @@
                                        Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
                             <TextBlock TextWrapping="Wrap" FontSize="13" Margin="0,2,0,0"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                       Text="Open apps will close without asking. You can close this window — the shutdown stays scheduled." />
+                                       Text="Open apps will close without asking. Closing this window keeps Shutdown Timer in the tray so it can keep your PC awake." />
                         </StackPanel>
                     </DockPanel>
                 </Border>
