@@ -62,7 +62,7 @@ The exe isn't code-signed, so Windows SmartScreen may warn the first time you ru
 | Schedule | **Schedule shutdown**, or press Enter |
 | Cancel | **Cancel shutdown** |
 
-You can close the window after scheduling: the app moves to the system tray and keeps the PC awake. Click the tray icon to reopen it, or right-click for **Cancel shutdown** and **Exit**.
+Closing or minimizing the window moves the app to the system tray, where it keeps the PC awake while a shutdown is pending. Click the tray icon to reopen it, or right-click for **Cancel shutdown** and **Exit**. Exit is the only way to quit.
 
 > [!WARNING]
 > At the scheduled time, Windows closes open apps **without asking you to save**. Save your work first.

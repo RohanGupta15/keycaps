@@ -4,16 +4,17 @@ using Forms = System.Windows.Forms;
 
 namespace ShutdownTimer;
 
-/// <summary>System tray icon, shown only while a shutdown is pending (the app is keeping the PC awake).</summary>
+/// <summary>System tray icon, shown for as long as the app runs. Closing or minimizing the window hides it here.</summary>
 sealed class TrayIcon : IDisposable
 {
     readonly Forms.NotifyIcon icon;
+    readonly Forms.ToolStripItem cancelItem;
 
     public TrayIcon(Action open, Action cancelShutdown, Action exit)
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Open Shutdown Timer", null, (_, _) => open());
-        menu.Items.Add("Cancel shutdown", null, (_, _) => cancelShutdown());
+        cancelItem = menu.Items.Add("Cancel shutdown", null, (_, _) => cancelShutdown());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Exit (the shutdown stays scheduled)", null, (_, _) => exit());
 
@@ -23,23 +24,19 @@ sealed class TrayIcon : IDisposable
             Icon = new Icon(stream, Forms.SystemInformation.SmallIconSize),
             ContextMenuStrip = menu,
             Text = "Shutdown Timer",
+            Visible = true,
         };
         icon.MouseClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) open(); };
     }
 
-    public void Show(string tooltip)
+    public void Update(string status, bool pending)
     {
-        icon.Text = $"Shutdown Timer: {tooltip}"; // tooltip max is 127 chars
-        icon.Visible = true;
+        icon.Text = $"Shutdown Timer: {status}"; // tooltip max is 127 chars
+        cancelItem.Enabled = pending;
     }
 
-    public void Hide() => icon.Visible = false;
-
-    public void Notify(string title, string text)
-    {
-        if (icon.Visible)
-            icon.ShowBalloonTip(5000, title, text, Forms.ToolTipIcon.None);
-    }
+    public void Notify(string title, string text) =>
+        icon.ShowBalloonTip(5000, title, text, Forms.ToolTipIcon.None);
 
     public void Dispose()
     {
