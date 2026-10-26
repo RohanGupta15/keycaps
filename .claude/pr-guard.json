@@ -1,0 +1,11 @@
+{
+  "base": "main",
+  "checks": {
+    "build": { "cmd": "dotnet build -c Release -nologo -v q", "files": false, "source": "README.md#build-from-source" },
+    "test": { "cmd": "dotnet test tests/ShutdownTimer.Tests/ShutdownTimer.Tests.csproj -nologo -v q", "files": false, "source": "README.md#testing" }
+  },
+  "already_enforced": [],
+  "codeql": "none",
+  "codeql_suggested": true,
+  "ignore": []
+}

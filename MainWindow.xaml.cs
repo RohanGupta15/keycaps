@@ -13,7 +13,7 @@ using Microsoft.Win32;
 namespace ShutdownTimer;
 
 // Schedules the shutdown with Windows' own `shutdown /s /t <seconds>`, so it still happens if this
-// app is closed. While a shutdown is pending the app also keeps the PC awake (from the tray), and
+// app exits. While a shutdown is pending the app also keeps the PC awake (from the tray), and
 // because Windows' countdown pauses while the PC sleeps, it re-checks the wall clock after every
 // resume and corrects the countdown (see ShutdownPlanner).
 public partial class MainWindow : Window
@@ -51,7 +51,8 @@ public partial class MainWindow : Window
         LoadState();
         if (scheduledAt is not null)
             Resync();   // the PC may have slept, or restarted, while the app was closed
-        Refresh();
+        else
+            OnScheduleChanged();
     }
 
     // Windows' last boot time. The tick count keeps counting through sleep, so this stays stable.
@@ -373,13 +374,13 @@ public partial class MainWindow : Window
         if (scheduledAt is { } t)
         {
             keepAwake.Hold($"Shutdown Timer: keeping the PC awake for a shutdown at {Clock(t)}");
-            tray.Show($"Shutdown at {Clock(t)}");
+            tray.Update($"Shutdown at {Clock(t)}", pending: true);
         }
         else
         {
             lateFor = null;
             keepAwake.Release();
-            tray.Hide();
+            tray.Update("No shutdown scheduled", pending: false);
         }
         Refresh();
     }
@@ -388,18 +389,43 @@ public partial class MainWindow : Window
 
     // ---------- Window and tray ----------
 
+    static string HiddenNoticeFile => Path.Combine(ShutdownCommand.DataFolder, "tray-notice-shown");
+
     protected override void OnClosing(CancelEventArgs e)
     {
-        // Closing with a shutdown pending hides to the tray, so the PC stays awake until then.
-        if (!exiting && scheduledAt is not null)
+        // Close hides to the tray; only Exit in the tray menu quits. A pending shutdown keeps the PC awake meanwhile.
+        if (!exiting)
         {
             e.Cancel = true;
-            Hide();
-            tray.Notify("Shutdown Timer is still running",
-                $"It's keeping your PC awake until {Clock(scheduledAt.Value)}. Open it from the tray to cancel.");
+            HideToTray();
             return;
         }
         base.OnClosing(e);
+    }
+
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        if (WindowState == WindowState.Minimized)
+            HideToTray();
+    }
+
+    void HideToTray()
+    {
+        Hide();
+        if (File.Exists(HiddenNoticeFile))
+            return;
+        tray.Notify("Shutdown Timer is still running",
+            scheduledAt is { } t
+                ? $"It's keeping your PC awake until {Clock(t)}. Open it from the tray to cancel."
+                : "Open it from the tray, or right-click the tray icon to exit.");
+        try
+        {
+            Directory.CreateDirectory(ShutdownCommand.DataFolder);
+            File.WriteAllText(HiddenNoticeFile, "");
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     protected override void OnClosed(EventArgs e)
