@@ -16,6 +16,20 @@ sealed class TrayIcon : IDisposable
         menu.Items.Add("Open Shutdown Timer", null, (_, _) => open());
         cancelItem = menu.Items.Add("Cancel shutdown", null, (_, _) => cancelShutdown());
         menu.Items.Add(new Forms.ToolStripSeparator());
+        var autoStartItem = new Forms.ToolStripMenuItem("Start with Windows", null, (_, _) => AutoStart.Set(!AutoStart.Enabled))
+        {
+            Enabled = AutoStart.Available,
+        };
+        menu.Items.Add(autoStartItem);
+        // Read on every open: it can also be switched in Task Manager while the app runs.
+        menu.Opening += (_, _) =>
+        {
+            autoStartItem.Checked = AutoStart.Enabled;
+            autoStartItem.Text = AutoStart.DisabledInTaskManager
+                ? "Start with Windows (turned off in Task Manager)"
+                : "Start with Windows";
+        };
+        menu.Items.Add(new Forms.ToolStripSeparator());
         exitItem = menu.Items.Add("Exit", null, (_, _) => exit());
 
         var stream = Application.GetResourceStream(new Uri("pack://application:,,,/brand/shutdown-timer.ico")).Stream;

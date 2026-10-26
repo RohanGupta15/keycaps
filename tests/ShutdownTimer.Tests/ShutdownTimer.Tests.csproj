@@ -21,6 +21,8 @@
   <ItemGroup>
     <!-- The planner is plain C# with no WPF dependency, so it's linked in rather than referencing the app. -->
     <Compile Include="..\..\ShutdownPlanner.cs" Link="ShutdownPlanner.cs" />
+    <Compile Include="..\..\AutoStart.cs" Link="AutoStart.cs" />
+    <Compile Include="..\..\ShutdownCommand.cs" Link="ShutdownCommand.cs" />
   </ItemGroup>
 
 </Project>

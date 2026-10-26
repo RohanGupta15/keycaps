@@ -25,9 +25,12 @@ public partial class App : Application
         }
 
         base.OnStartup(e);
+        AutoStart.FixPath();
         var window = new MainWindow();
         MainWindow = window;
-        window.Show();
+        // Started with Windows: stay in the tray. A manual launch always opens the window.
+        if (!e.Args.Any(a => string.Equals(a, AutoStart.BackgroundArg, StringComparison.OrdinalIgnoreCase)))
+            window.Show();
 
         ThreadPool.RegisterWaitForSingleObject(showRequest,
             (_, _) => Dispatcher.BeginInvoke(window.ShowFromTray), null, Timeout.Infinite, executeOnlyOnce: false);
