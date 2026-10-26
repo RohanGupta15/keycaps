@@ -8,7 +8,7 @@ namespace ShutdownTimer;
 sealed class TrayIcon : IDisposable
 {
     readonly Forms.NotifyIcon icon;
-    readonly Forms.ToolStripItem cancelItem;
+    readonly Forms.ToolStripItem cancelItem, exitItem;
 
     public TrayIcon(Action open, Action cancelShutdown, Action exit)
     {
@@ -16,7 +16,7 @@ sealed class TrayIcon : IDisposable
         menu.Items.Add("Open Shutdown Timer", null, (_, _) => open());
         cancelItem = menu.Items.Add("Cancel shutdown", null, (_, _) => cancelShutdown());
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("Exit (the shutdown stays scheduled)", null, (_, _) => exit());
+        exitItem = menu.Items.Add("Exit", null, (_, _) => exit());
 
         var stream = Application.GetResourceStream(new Uri("pack://application:,,,/brand/shutdown-timer.ico")).Stream;
         icon = new Forms.NotifyIcon
@@ -33,6 +33,7 @@ sealed class TrayIcon : IDisposable
     {
         icon.Text = $"Shutdown Timer: {status}"; // tooltip max is 127 chars
         cancelItem.Enabled = pending;
+        exitItem.Text = pending ? "Exit (the shutdown stays scheduled)" : "Exit";
     }
 
     public void Notify(string title, string text) =>
