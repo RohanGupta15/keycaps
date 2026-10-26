@@ -16,7 +16,7 @@ sealed class TrayIcon : IDisposable
         menu.Items.Add("Open Shutdown Timer", null, (_, _) => open());
         cancelItem = menu.Items.Add("Cancel shutdown", null, (_, _) => cancelShutdown());
         menu.Items.Add(new Forms.ToolStripSeparator());
-        var autoStartItem = new Forms.ToolStripMenuItem("Start with Windows", null, (_, _) => AutoStart.Set(!AutoStart.Enabled))
+        var autoStartItem = new Forms.ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleAutoStart())
         {
             Enabled = AutoStart.Available,
         };
@@ -41,6 +41,16 @@ sealed class TrayIcon : IDisposable
             Visible = true,
         };
         icon.MouseClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) open(); };
+    }
+
+    void ToggleAutoStart()
+    {
+        // A blocked registry write (policy, antivirus) must not crash an app that may be holding a shutdown.
+        try { AutoStart.Set(!AutoStart.Enabled); }
+        catch (Exception e) when (AutoStart.IsRegistryFailure(e))
+        {
+            Notify("Couldn't change Start with Windows", "Windows didn't allow the change. You can set it in Task Manager → Startup apps.");
+        }
     }
 
     public void Update(string status, bool pending)

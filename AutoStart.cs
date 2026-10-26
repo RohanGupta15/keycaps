@@ -1,3 +1,5 @@
+using System.IO;
+using System.Security;
 using Microsoft.Win32;
 
 namespace ShutdownTimer;
@@ -56,12 +58,26 @@ static class AutoStart
         approved?.DeleteValue(ValueName, throwOnMissingValue: false);
     }
 
-    /// <summary>Points the Run value at this exe again if it was moved since it was registered.</summary>
+    /// <summary>
+    /// Points the Run value at this exe again if the registered one no longer exists (it was moved).
+    /// A copy that still exists keeps the entry, so running a dev build doesn't take it over.
+    /// </summary>
     public static void FixPath()
     {
         if (!Available) return;
-        using var run = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
-        if (run?.GetValue(ValueName) is string current && !string.Equals(current, Command, StringComparison.OrdinalIgnoreCase))
-            run.SetValue(ValueName, Command);
+        try
+        {
+            using var run = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            if (run?.GetValue(ValueName) is string current && !File.Exists(ExePath(current)))
+                run.SetValue(ValueName, Command);
+        }
+        catch (Exception e) when (IsRegistryFailure(e)) { } // best effort: autostart just keeps the old path
     }
+
+    /// <summary>The exe path from a Run value written as <c>"path" args</c>.</summary>
+    public static string ExePath(string command) =>
+        command.StartsWith('"') && command.IndexOf('"', 1) is var end and > 0 ? command[1..end] : command;
+
+    public static bool IsRegistryFailure(Exception e) =>
+        e is UnauthorizedAccessException or SecurityException or IOException;
 }
