@@ -16,6 +16,20 @@ sealed class TrayIcon : IDisposable
         menu.Items.Add("Open Shutdown Timer", null, (_, _) => open());
         cancelItem = menu.Items.Add("Cancel shutdown", null, (_, _) => cancelShutdown());
         menu.Items.Add(new Forms.ToolStripSeparator());
+        var autoStartItem = new Forms.ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleAutoStart())
+        {
+            Enabled = AutoStart.Available,
+        };
+        menu.Items.Add(autoStartItem);
+        // Read on every open: it can also be switched in Task Manager while the app runs.
+        menu.Opening += (_, _) =>
+        {
+            autoStartItem.Checked = AutoStart.Enabled;
+            autoStartItem.Text = AutoStart.DisabledInTaskManager
+                ? "Start with Windows (turned off in Task Manager)"
+                : "Start with Windows";
+        };
+        menu.Items.Add(new Forms.ToolStripSeparator());
         exitItem = menu.Items.Add("Exit", null, (_, _) => exit());
 
         var stream = Application.GetResourceStream(new Uri("pack://application:,,,/brand/shutdown-timer.ico")).Stream;
@@ -27,6 +41,16 @@ sealed class TrayIcon : IDisposable
             Visible = true,
         };
         icon.MouseClick += (_, e) => { if (e.Button == Forms.MouseButtons.Left) open(); };
+    }
+
+    void ToggleAutoStart()
+    {
+        // A blocked registry write (policy, antivirus) must not crash an app that may be holding a shutdown.
+        try { AutoStart.Set(!AutoStart.Enabled); }
+        catch (Exception e) when (AutoStart.IsRegistryFailure(e))
+        {
+            Notify("Couldn't change Start with Windows", "Windows didn't allow the change. You can set it in Task Manager → Startup apps.");
+        }
     }
 
     public void Update(string status, bool pending)
