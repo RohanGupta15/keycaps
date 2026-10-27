@@ -134,6 +134,15 @@
             <EventSetter Event="MouseWheel" Handler="Segment_MouseWheel" />
         </Style>
 
+        <!-- Repeat day chip (Clock app alarm style) -->
+        <Style x:Key="DayChip" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="2,0" />
+            <EventSetter Event="Click" Handler="Day_Click" />
+        </Style>
+
         <Style x:Key="PresetButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="Height" Value="32" />
@@ -238,6 +247,22 @@
 
                         <TextBlock x:Name="PreviewText" HorizontalAlignment="Center" FontSize="13"
                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="Today · in 1h 05m" />
+
+                        <DockPanel Margin="0,20,0,8">
+                            <TextBlock Text="Repeat" Style="{StaticResource SectionLabel}" />
+                            <TextBlock x:Name="RepeatText" Text="Once" Style="{StaticResource Caption}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <!-- Tag is the DayOfWeek number. None picked = once. -->
+                        <StackPanel x:Name="DayChips" Orientation="Horizontal" HorizontalAlignment="Center">
+                            <ToggleButton Style="{StaticResource DayChip}" Content="M" Tag="1" ToolTip="Monday" AutomationProperties.Name="Monday" />
+                            <ToggleButton Style="{StaticResource DayChip}" Content="T" Tag="2" ToolTip="Tuesday" AutomationProperties.Name="Tuesday" />
+                            <ToggleButton Style="{StaticResource DayChip}" Content="W" Tag="3" ToolTip="Wednesday" AutomationProperties.Name="Wednesday" />
+                            <ToggleButton Style="{StaticResource DayChip}" Content="T" Tag="4" ToolTip="Thursday" AutomationProperties.Name="Thursday" />
+                            <ToggleButton Style="{StaticResource DayChip}" Content="F" Tag="5" ToolTip="Friday" AutomationProperties.Name="Friday" />
+                            <ToggleButton Style="{StaticResource DayChip}" Content="S" Tag="6" ToolTip="Saturday" AutomationProperties.Name="Saturday" />
+                            <ToggleButton Style="{StaticResource DayChip}" Content="S" Tag="0" ToolTip="Sunday" AutomationProperties.Name="Sunday" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -270,6 +295,25 @@
 
             <!-- Scheduled: countdown ring -->
             <StackPanel x:Name="ScheduledPanel" Visibility="Collapsed">
+                <Border x:Name="WarningBar" Visibility="Collapsed" Margin="0,0,0,12" Padding="16,12,12,12" CornerRadius="8" BorderThickness="1"
+                        Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Left" Width="16" Height="16" Margin="0,2,12,0" VerticalAlignment="Top">
+                            <Ellipse Fill="{DynamicResource SystemFillColorCautionBrush}" />
+                            <TextBlock Text="!" FontSize="11" FontWeight="Bold" Foreground="Black"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1" />
+                        </Grid>
+                        <StackPanel>
+                            <TextBlock Text="Shutting down soon" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock x:Name="WarningText" TextWrapping="Wrap" FontSize="13" Margin="0,2,0,8"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            <Button Content="Snooze 15 min" HorizontalAlignment="Left" Click="Snooze_Click" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
                 <Border Style="{StaticResource Card}" Padding="24,20,24,28">
                     <StackPanel>
                         <TextBlock x:Name="ScheduledTitle" Text="Shutdown scheduled" Style="{StaticResource SectionLabel}" />
@@ -322,8 +366,31 @@
                     </DockPanel>
                 </Border>
 
-                <Button Content="Cancel shutdown" HorizontalAlignment="Stretch" Height="40" FontSize="14"
-                        Margin="0,20,0,0" Click="Cancel_Click" />
+                <Border x:Name="AutoStartBar" Visibility="Collapsed" Margin="0,12,0,0" Padding="16,12,12,12" CornerRadius="8" BorderThickness="1"
+                        Background="{DynamicResource SystemFillColorCautionBackgroundBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Left" Width="16" Height="16" Margin="0,2,12,0" VerticalAlignment="Top">
+                            <Ellipse Fill="{DynamicResource SystemFillColorCautionBrush}" />
+                            <TextBlock Text="!" FontSize="11" FontWeight="Bold" Foreground="Black"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1" />
+                        </Grid>
+                        <StackPanel>
+                            <TextBlock Text="Turn on Start with Windows" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock TextWrapping="Wrap" FontSize="13" Margin="0,2,0,8"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                       Text="After each shutdown, Shutdown Timer has to start with Windows to set up the next one." />
+                            <Button Content="Turn on" HorizontalAlignment="Left" Click="TurnOnAutoStart_Click" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <UniformGrid Rows="1" Margin="-4,20,-4,0">
+                    <Button x:Name="SkipButton" Content="Skip this one" Height="40" FontSize="14" Margin="4,0"
+                            Visibility="Collapsed" Click="Skip_Click" />
+                    <Button Content="Cancel shutdown" Height="40" FontSize="14" Margin="4,0" Click="Cancel_Click" />
+                </UniformGrid>
             </StackPanel>
         </Grid>
     </Grid>

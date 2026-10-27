@@ -38,6 +38,7 @@
 ## Features
 
 - **Pick a clock time, not a duration.** Set 3:00 AM and it shuts down at 3:00 AM. If that time has already passed today, it's set for tomorrow.
+- **Repeat on chosen days:** every day, weekdays or any days you pick. **Skip this one** skips a single night, and 5 minutes before each shutdown the window pops up so you can snooze it for 15 minutes.
 - **Quick set:** in 30 minutes, 1 hour or 2 hours.
 - **Live countdown** with a progress ring once a shutdown is scheduled, and one click to cancel.
 - **Survives closing the app.** Windows holds the shutdown, not the app.
@@ -60,8 +61,11 @@ The exe isn't code-signed, so Windows SmartScreen may warn the first time you ru
 |---|---|
 | Set the time | Use the chevrons above and below the hour, minute and AM/PM, or scroll over them |
 | Set it relative to now | Pick **In 30 min**, **In 1 hour** or **In 2 hours** |
+| Repeat it | Pick days under **Repeat** before scheduling. None picked means once |
 | Schedule | **Schedule shutdown**, or press Enter |
-| Cancel | **Cancel shutdown** |
+| Skip one night | **Skip this one**, or **Skip next shutdown** in the tray menu |
+| Put it off | **Snooze 15 min** in the warning 5 minutes before |
+| Cancel | **Cancel shutdown**. This also stops a repeat |
 
 Closing or minimizing the window moves the app to the system tray, where it keeps the PC awake while a shutdown is pending. Click the tray icon to reopen it, or right-click for **Cancel shutdown** and **Exit**. Exit is the only way to quit.
 
@@ -73,6 +77,7 @@ Closing or minimizing the window moves the app to the system tray, where it keep
 - Scheduling runs Windows' own `shutdown /s /t <seconds> /d p:0:0`, with the seconds counted to the chosen time. Cancelling runs `shutdown /a`.
 - **Staying awake:** while a shutdown is pending, the app holds a `PowerRequestSystemRequired` power request (`PowerSetRequest`). It shows up in `powercfg /requests`, run from an administrator terminal.
 - **Sleep:** `shutdown /t` counts seconds, and the count pauses while the PC sleeps. So after every resume, the app compares the clock with the target, which is the source of truth. It detects a resume from Windows' resume event or a gap between its 1-second ticks, since apps don't always get the event on Modern Standby. It then re-arms the countdown, shuts down late with a warning, or reports a skipped shutdown. The rules live in [`ShutdownPlanner.cs`](ShutdownPlanner.cs).
+- **Repeating:** after each shutdown, the app has to start with Windows to set up the next one. If Start with Windows is off, the window offers to turn it on. Countdowns are measured in UTC, so a daylight-saving change doesn't move a shutdown by an hour.
 - The chosen time is saved to `%LOCALAPPDATA%\ShutdownTimer\scheduled.txt`, so the app can pick the schedule up again after a restart or sleep. If Windows restarted after the target, the shutdown already happened and the saved time is simply dropped.
 - **Start with Windows** adds `"<exe>" --background` to `HKCU\...\CurrentVersion\Run`, and updates the path if the exe moves. If you turn it off in Task Manager → Startup apps, the tray menu says so. `--dry-run` never touches it.
 - The window applies the Mica Alt backdrop through `DwmSetWindowAttribute` and draws its own title bar.

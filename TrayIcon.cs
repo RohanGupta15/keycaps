@@ -8,12 +8,14 @@ namespace ShutdownTimer;
 sealed class TrayIcon : IDisposable
 {
     readonly Forms.NotifyIcon icon;
-    readonly Forms.ToolStripItem cancelItem, exitItem;
+    readonly Forms.ToolStripItem skipItem, cancelItem, exitItem;
 
-    public TrayIcon(Action open, Action cancelShutdown, Action exit)
+    public TrayIcon(Action open, Action cancelShutdown, Action skipNext, Action exit)
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Open Shutdown Timer", null, (_, _) => open());
+        skipItem = menu.Items.Add("Skip next shutdown", null, (_, _) => skipNext());
+        skipItem.Visible = false;
         cancelItem = menu.Items.Add("Cancel shutdown", null, (_, _) => cancelShutdown());
         menu.Items.Add(new Forms.ToolStripSeparator());
         var autoStartItem = new Forms.ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleAutoStart())
@@ -53,8 +55,9 @@ sealed class TrayIcon : IDisposable
         }
     }
 
-    public void Update(string status, bool pending)
+    public void Update(string status, bool pending, bool repeating)
     {
+        skipItem.Visible = repeating;
         icon.Text = $"Shutdown Timer: {status}"; // tooltip max is 127 chars
         cancelItem.Enabled = pending;
         exitItem.Text = pending ? "Exit (the shutdown stays scheduled)" : "Exit";
