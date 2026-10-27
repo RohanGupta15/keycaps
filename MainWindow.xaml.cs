@@ -218,7 +218,8 @@ public partial class MainWindow : Window
         // Safety net: Windows should have shut down by now, so its countdown was off.
         else if (scheduledAt is { } at && DateTime.Now - at > TimeSpan.FromSeconds(15))
             Resync();
-        else if (scheduledAt is { } due && !warned && lateFor is null && due - DateTime.Now <= ShutdownPlanner.HeadsUp)
+        else if (scheduledAt is { } due && !warned && lateFor is null
+                 && due > DateTime.Now && due - DateTime.Now <= ShutdownPlanner.HeadsUp)
             WarnShortly(due);
 
         Refresh();
@@ -324,6 +325,9 @@ public partial class MainWindow : Window
         var (code, output) = ShutdownCommand.Schedule(target.ToUniversalTime() - DateTime.UtcNow, target);
         if (code != 0)
         {
+            // The old shutdown was already cancelled above, so nothing is pending now.
+            ClearState();
+            OnScheduleChanged();
             MessageBox.Show(this, $"Windows refused to schedule the shutdown (code {code}).\n\n{output}",
                 "Shutdown Timer", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
@@ -409,6 +413,7 @@ public partial class MainWindow : Window
                 var soon = now + plan.Delay;
                 ShutdownCommand.Schedule(plan.Delay, soon);
                 lateFor ??= target;
+                WarningBar.Visibility = Visibility.Collapsed;   // the late-shutdown status replaces it
                 scheduledAt = soon;
                 scheduledFrom = now;
                 SaveState();
