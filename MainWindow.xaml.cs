@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -35,6 +36,9 @@ public partial class MainWindow : Window
     DateTime? scheduledAt;
     DateTime scheduledFrom;   // when it was scheduled, for the progress ring
     DateTime? lateFor;        // original target, while running a late shutdown after sleep
+    int repeatDays;           // ShutdownPlanner day mask: picked in the window, saved with the schedule. 0 = once
+    TimeSpan repeatTime;      // time of day of the repeating schedule (a snoozed target may differ)
+    bool warned;              // the heads-up before this target was shown
     DateTime lastTickUtc = DateTime.UtcNow;
     bool exiting;
 
@@ -42,13 +46,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        tray = new TrayIcon(ShowFromTray, CancelShutdown, ExitApp);
+        tray = new TrayIcon(ShowFromTray, CancelShutdown, SkipNext, ExitApp);
 
         tick.Tick += (_, _) => OnTick();
         tick.Start();
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
         LoadState();
+        SyncDayChips();
+        Activated += (_, _) => RefreshAutoStartBar();   // it may have been switched in Task Manager
         if (scheduledAt is not null)
             Resync();   // the PC may have slept, or restarted, while the app was closed
         else
@@ -141,12 +147,20 @@ public partial class MainWindow : Window
 
     TimeSpan PickedTime => new((hour12 % 12) + (pm ? 12 : 0), minute, 0);
 
-    // Next occurrence of the picked clock time: today if still ahead, otherwise tomorrow.
-    DateTime NextOccurrence()
+    // Next occurrence of the picked clock time on a picked day; once means today if still ahead, otherwise tomorrow.
+    DateTime NextOccurrence() =>
+        ShutdownPlanner.NextRepeat(DateTime.Now, PickedTime, repeatDays == 0 ? ShutdownPlanner.EveryDay : repeatDays);
+
+    void Day_Click(object sender, RoutedEventArgs e)
     {
-        var now = DateTime.Now;
-        var target = now.Date + PickedTime;
-        return target <= now ? target.AddDays(1) : target;
+        repeatDays ^= 1 << int.Parse((string)((FrameworkElement)sender).Tag, CultureInfo.InvariantCulture);
+        Refresh();
+    }
+
+    void SyncDayChips()
+    {
+        foreach (var chip in DayChips.Children.OfType<ToggleButton>())
+            chip.IsChecked = (repeatDays >> int.Parse((string)chip.Tag, CultureInfo.InvariantCulture) & 1) != 0;
     }
 
     void SetPicked(DateTime t)
@@ -204,6 +218,9 @@ public partial class MainWindow : Window
         // Safety net: Windows should have shut down by now, so its countdown was off.
         else if (scheduledAt is { } at && DateTime.Now - at > TimeSpan.FromSeconds(15))
             Resync();
+        else if (scheduledAt is { } due && !warned && lateFor is null
+                 && due > DateTime.Now && due - DateTime.Now <= ShutdownPlanner.HeadsUp)
+            WarnShortly(due);
 
         Refresh();
     }
@@ -223,6 +240,7 @@ public partial class MainWindow : Window
 
         var next = NextOccurrence();
         PreviewText.Text = $"{DayWord(next)} · in {FormatSpan(next - DateTime.Now)}";
+        RepeatText.Text = ShutdownPlanner.DescribeDays(repeatDays);
 
         if (scheduledAt is { } t)
         {
@@ -236,7 +254,10 @@ public partial class MainWindow : Window
             var total = (t - scheduledFrom).TotalSeconds;
             ProgressArc.Data = RingArc(total > 0 ? left.TotalSeconds / total : 1);
 
-            ScheduledTitle.Text = lateFor is null ? "Shutdown scheduled" : "Shutting down";
+            ScheduledTitle.Text = lateFor is not null ? "Shutting down"
+                : repeatDays != 0 ? $"Shutdown · {ShutdownPlanner.DescribeDays(repeatDays)}"
+                : "Shutdown scheduled";
+            SkipButton.Visibility = repeatDays != 0 && lateFor is null ? Visibility.Visible : Visibility.Collapsed;
             if (lateFor is { } missed)
                 SetAwakeStatus("", $"Your PC was asleep at {Clock(missed)}", caution: false);
             else if (SystemParameters.PowerLineStatus == PowerLineStatus.Offline)
@@ -288,25 +309,41 @@ public partial class MainWindow : Window
 
     void Schedule_Click(object sender, RoutedEventArgs e)
     {
-        var now = DateTime.Now;
-        var target = NextOccurrence();
+        repeatTime = PickedTime;
+        if (Arm(NextOccurrence()))
+            MissedBar.Visibility = Visibility.Collapsed;
+    }
 
+    /// <summary>
+    /// Replaces any pending shutdown with one at <paramref name="target"/>. The delay is counted in UTC,
+    /// so a DST change between now and then doesn't move the shutdown by an hour.
+    /// </summary>
+    bool Arm(DateTime target)
+    {
+        var now = DateTime.Now;
         ShutdownCommand.Abort();   // replace any shutdown that is already pending
-        var (code, output) = ShutdownCommand.Schedule(target - now, target);
+        var (code, output) = ShutdownCommand.Schedule(target.ToUniversalTime() - DateTime.UtcNow, target);
         if (code != 0)
         {
+            // The old shutdown was already cancelled above, so nothing is pending now.
+            ClearState();
+            OnScheduleChanged();
             MessageBox.Show(this, $"Windows refused to schedule the shutdown (code {code}).\n\n{output}",
                 "Shutdown Timer", MessageBoxButton.OK, MessageBoxImage.Error);
-            return;
+            return false;
         }
 
         scheduledAt = target;
         scheduledFrom = now;
         lateFor = null;
-        MissedBar.Visibility = Visibility.Collapsed;
+        warned = target - now <= ShutdownPlanner.HeadsUp;   // set this close: the user already knows
+        WarningBar.Visibility = Visibility.Collapsed;
         SaveState();
         OnScheduleChanged();
+        return true;
     }
+
+    void ArmNextRepeat(DateTime after) => Arm(ShutdownPlanner.NextRepeat(after, repeatTime, repeatDays));
 
     void Cancel_Click(object sender, RoutedEventArgs e) => CancelShutdown();
 
@@ -314,7 +351,42 @@ public partial class MainWindow : Window
     {
         ShutdownCommand.Abort();
         ClearState();
+        repeatDays = 0;   // cancel stops the repeat too; Skip is for one occurrence
+        SyncDayChips();
         OnScheduleChanged();
+    }
+
+    void Skip_Click(object sender, RoutedEventArgs e) => SkipNext();
+
+    void SkipNext()
+    {
+        if (repeatDays != 0 && scheduledAt is { } t)
+            ArmNextRepeat(t);
+    }
+
+    void Snooze_Click(object sender, RoutedEventArgs e) => Arm(DateTime.Now + ShutdownPlanner.Snooze);
+
+    void WarnShortly(DateTime due)
+    {
+        warned = true;
+        WarningText.Text = $"Your PC shuts down at {Clock(due)}. Save your work, or snooze it for {ShutdownPlanner.Snooze.TotalMinutes:0} minutes.";
+        WarningBar.Visibility = Visibility.Visible;
+        ShowFromTray();
+        Topmost = true;    // in front of whatever the user is doing, without staying on top
+        Topmost = false;
+        tray.Notify($"Shutting down at {Clock(due)}", "Open Shutdown Timer to cancel or snooze.");
+    }
+
+    // Repeating needs the app to start with Windows: after each shutdown, that's what sets up the next one.
+    void RefreshAutoStartBar() =>
+        AutoStartBar.Visibility = repeatDays != 0 && scheduledAt is not null && AutoStart.Available && !AutoStart.Enabled
+            ? Visibility.Visible : Visibility.Collapsed;
+
+    void TurnOnAutoStart_Click(object sender, RoutedEventArgs e)
+    {
+        try { AutoStart.Set(true); }
+        catch (Exception ex) when (AutoStart.IsRegistryFailure(ex)) { }
+        RefreshAutoStartBar();
     }
 
     /// <summary>
@@ -327,7 +399,7 @@ public partial class MainWindow : Window
             return;
 
         var now = DateTime.Now;
-        var plan = ShutdownPlanner.Decide(now, target, LastBoot);
+        var plan = ShutdownPlanner.Decide(DateTime.UtcNow, target.ToUniversalTime(), LastBoot.ToUniversalTime());
         switch (plan.Action)
         {
             case PlanAction.Rearm:
@@ -341,6 +413,7 @@ public partial class MainWindow : Window
                 var soon = now + plan.Delay;
                 ShutdownCommand.Schedule(plan.Delay, soon);
                 lateFor ??= target;
+                WarningBar.Visibility = Visibility.Collapsed;   // the late-shutdown status replaces it
                 scheduledAt = soon;
                 scheduledFrom = now;
                 SaveState();
@@ -356,13 +429,24 @@ public partial class MainWindow : Window
                     : missed.Date == DateTime.Today.AddDays(-1) ? "yesterday"
                     : "on " + missed.ToString("dddd", CultureInfo.CurrentCulture);
                 MissedText.Text = $"Your PC was asleep at {Clock(missed)} {when}, so it didn't shut down.";
+                if (repeatDays != 0)
+                {
+                    tray.Notify("Shutdown skipped", MissedText.Text);
+                    ArmNextRepeat(now);
+                    return;
+                }
                 MissedBar.Visibility = Visibility.Visible;
                 ShowFromTray();
                 break;
 
             case PlanAction.AlreadyDone:
-                // Windows restarted after the target: the shutdown happened. Just forget it.
+                // Windows restarted after the target: the shutdown happened. Forget it, or set up the next one.
                 ClearState();
+                if (repeatDays != 0)
+                {
+                    ArmNextRepeat(now);
+                    return;
+                }
                 break;
         }
         OnScheduleChanged();
@@ -374,14 +458,16 @@ public partial class MainWindow : Window
         if (scheduledAt is { } t)
         {
             keepAwake.Hold($"Shutdown Timer: keeping the PC awake for a shutdown at {Clock(t)}");
-            tray.Update($"Shutdown at {Clock(t)}", pending: true);
+            tray.Update(repeatDays != 0 ? $"Next: {t:ddd} {Clock(t)}" : $"Shutdown at {Clock(t)}",
+                pending: true, repeating: repeatDays != 0);
         }
         else
         {
             lateFor = null;
             keepAwake.Release();
-            tray.Update("No shutdown scheduled", pending: false);
+            tray.Update("No shutdown scheduled", pending: false, repeating: false);
         }
+        RefreshAutoStartBar();
         Refresh();
     }
 
@@ -449,7 +535,7 @@ public partial class MainWindow : Window
         Close();
     }
 
-    // ---------- Persistence: "<scheduledAt>|<scheduledFrom>" ----------
+    // ---------- Persistence: "<scheduledAt>|<scheduledFrom>|<repeatDays>|<repeatTime>" ----------
 
     void LoadState()
     {
@@ -465,6 +551,15 @@ public partial class MainWindow : Window
             scheduledAt = at;
             scheduledFrom = parts.Length > 1 && TryParseDate(parts[1], out var from) ? from : DateTime.Now;
             SetPicked(at);
+            // Files from before repeating have no repeat fields: a one-off schedule.
+            if (parts.Length > 3 && int.TryParse(parts[2], CultureInfo.InvariantCulture, out var days)
+                && TimeSpan.TryParse(parts[3], CultureInfo.InvariantCulture, out var time)
+                && days is > 0 and <= ShutdownPlanner.EveryDay)
+            {
+                repeatDays = days;
+                repeatTime = time;
+                SetPicked(at.Date + time);
+            }
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -476,7 +571,8 @@ public partial class MainWindow : Window
     void SaveState()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(StateFile)!);
-        File.WriteAllText(StateFile, $"{scheduledAt!.Value:o}|{scheduledFrom:o}");
+        File.WriteAllText(StateFile, string.Create(CultureInfo.InvariantCulture,
+            $"{scheduledAt!.Value:o}|{scheduledFrom:o}|{repeatDays}|{repeatTime:c}"));
     }
 
     void ClearState()
