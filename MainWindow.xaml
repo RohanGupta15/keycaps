@@ -182,6 +182,8 @@
                 </TextBlock>
             </StackPanel>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                <Button Style="{StaticResource CaptionButton}" Content="&#xE713;" ToolTip="Settings"
+                        AutomationProperties.Name="Settings" Click="Settings_Click" />
                 <Button Style="{StaticResource CaptionButton}" Content="&#xE921;" ToolTip="Minimize" Click="Minimize_Click" />
                 <Button Style="{StaticResource CloseButton}" Content="&#xE8BB;" ToolTip="Close" Click="Close_Click" />
             </StackPanel>
@@ -391,6 +393,73 @@
                             Visibility="Collapsed" Click="Skip_Click" />
                     <Button Content="Cancel shutdown" Height="40" FontSize="14" Margin="4,0" Click="Cancel_Click" />
                 </UniformGrid>
+            </StackPanel>
+
+            <!-- Settings (PowerToys-style cards). Changes apply right away. -->
+            <StackPanel x:Name="SettingsPanel" Visibility="Collapsed">
+                <DockPanel Margin="0,0,0,12">
+                    <Button DockPanel.Dock="Left" Style="{StaticResource CaptionButton}" Width="32" Height="32"
+                            Content="&#xE72B;" ToolTip="Back" AutomationProperties.Name="Back" Focusable="True"
+                            WindowChrome.IsHitTestVisibleInChrome="False" Click="Back_Click" />
+                    <TextBlock Text="Settings" FontFamily="{StaticResource DisplayFont}" FontSize="20" FontWeight="SemiBold"
+                               Margin="8,0,0,2" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                </DockPanel>
+
+                <TextBlock Text="General" Style="{StaticResource SectionLabel}" Margin="4,0,0,8" />
+                <Border Style="{StaticResource Card}" Padding="16,12">
+                    <DockPanel>
+                        <CheckBox x:Name="AutoStartCheck" DockPanel.Dock="Right" VerticalAlignment="Center"
+                                  AutomationProperties.Name="Start with Windows" Click="AutoStartCheck_Click" />
+                        <StackPanel>
+                            <TextBlock Text="Start with Windows" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock x:Name="AutoStartNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <Border Style="{StaticResource Card}" Padding="16,12" Margin="0,4,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Close button" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,8"
+                                   Text="With a shutdown pending it always stays in the tray, to keep your PC awake." />
+                        <ComboBox x:Name="CloseCombo" AutomationProperties.Name="Close button"
+                                  SelectionChanged="CloseCombo_SelectionChanged">
+                            <ComboBoxItem Content="Keep running in the tray" />
+                            <ComboBoxItem Content="Quit when nothing is scheduled" />
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Shutdown" Style="{StaticResource SectionLabel}" Margin="4,16,0,8" />
+                <Border Style="{StaticResource Card}" Padding="16,12">
+                    <StackPanel>
+                        <TextBlock Text="Warn before shutdown" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,8"
+                                   Text="The window pops up with Snooze 15 min." />
+                        <!-- Order matches Settings.WarnChoices -->
+                        <ComboBox x:Name="WarnCombo" AutomationProperties.Name="Warn before shutdown"
+                                  SelectionChanged="WarnCombo_SelectionChanged">
+                            <ComboBoxItem Content="Off" />
+                            <ComboBoxItem Content="1 minute before" />
+                            <ComboBoxItem Content="5 minutes before" />
+                            <ComboBoxItem Content="10 minutes before" />
+                            <ComboBoxItem Content="15 minutes before" />
+                        </ComboBox>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="About" Style="{StaticResource SectionLabel}" Margin="4,16,0,8" />
+                <Border Style="{StaticResource Card}" Padding="16,12">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center">
+                            <Hyperlink Click="GitHub_Click">GitHub</Hyperlink>
+                        </TextBlock>
+                        <StackPanel>
+                            <TextBlock Text="Shutdown Timer" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock x:Name="VersionText" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
             </StackPanel>
         </Grid>
     </Grid>

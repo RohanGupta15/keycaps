@@ -45,6 +45,7 @@
 - **Keeps the PC awake until then.** While a shutdown is pending, the app holds a power request so Windows doesn't idle into sleep, and closing the window keeps it in the system tray.
 - **Handles sleep.** After the PC wakes, it checks the clock and corrects Windows' countdown. If the shutdown time passed while the PC was asleep, it either shuts down after a 60-second warning (if it's within 10 minutes) or tells you it was skipped. It never powers off hours later when you open the lid.
 - **Start with Windows** (tray menu): it starts quietly in the tray. No admin rights needed.
+- **Settings** (gear in the title bar, or the tray menu): Start with Windows, what the close button does, and how long before a shutdown to warn (Off, 1, 5, 10 or 15 minutes).
 - **Native Windows 11 look:** Fluent controls, a Mica Alt backdrop and a custom title bar. Follows your light or dark theme.
 
 ## Install
@@ -66,8 +67,9 @@ The exe isn't code-signed, so Windows SmartScreen may warn the first time you ru
 | Skip one night | **Skip this one**, or **Skip next shutdown** in the tray menu |
 | Put it off | **Snooze 15 min** in the warning 5 minutes before |
 | Cancel | **Cancel shutdown**. This also stops a repeat |
+| Change settings | The gear in the title bar, or **Settings** in the tray menu |
 
-Closing or minimizing the window moves the app to the system tray, where it keeps the PC awake while a shutdown is pending. Click the tray icon to reopen it, or right-click for **Cancel shutdown** and **Exit**. Exit is the only way to quit.
+Closing or minimizing the window moves the app to the system tray, where it keeps the PC awake while a shutdown is pending. Click the tray icon to reopen it, or right-click for **Cancel shutdown** and **Exit**. To make the close button quit instead, change it in **Settings**. With a shutdown pending it still goes to the tray.
 
 > [!WARNING]
 > At the scheduled time, Windows closes open apps **without asking you to save**. Save your work first.
@@ -78,6 +80,7 @@ Closing or minimizing the window moves the app to the system tray, where it keep
 - **Staying awake:** while a shutdown is pending, the app holds a `PowerRequestSystemRequired` power request (`PowerSetRequest`). It shows up in `powercfg /requests`, run from an administrator terminal.
 - **Sleep:** `shutdown /t` counts seconds, and the count pauses while the PC sleeps. So after every resume, the app compares the clock with the target, which is the source of truth. It detects a resume from Windows' resume event or a gap between its 1-second ticks, since apps don't always get the event on Modern Standby. It then re-arms the countdown, shuts down late with a warning, or reports a skipped shutdown. The rules live in [`ShutdownPlanner.cs`](ShutdownPlanner.cs).
 - **Repeating:** after each shutdown, the app has to start with Windows to set up the next one. If Start with Windows is off, the window offers to turn it on. Countdowns are measured in UTC, so a daylight-saving change doesn't move a shutdown by an hour.
+- Settings are saved to `%LOCALAPPDATA%\ShutdownTimer\settings.json`. A missing or broken file falls back to the defaults.
 - The chosen time is saved to `%LOCALAPPDATA%\ShutdownTimer\scheduled.txt`, so the app can pick the schedule up again after a restart or sleep. If Windows restarted after the target, the shutdown already happened and the saved time is simply dropped.
 - **Start with Windows** adds `"<exe>" --background` to `HKCU\...\CurrentVersion\Run`, and updates the path if the exe moves. If you turn it off in Task Manager → Startup apps, the tray menu says so. `--dry-run` never touches it.
 - The window applies the Mica Alt backdrop through `DwmSetWindowAttribute` and draws its own title bar.
@@ -135,6 +138,7 @@ keycaps/
 ├─ ShutdownCommand.cs       runs shutdown.exe (or logs it in --dry-run)
 ├─ TrayIcon.cs              system tray icon and menu
 ├─ AutoStart.cs             Start with Windows (Run key)
+├─ Settings.cs              user settings (settings.json)
 ├─ ShutdownTimer.csproj     version, icon, build settings
 ├─ tests/                   xUnit tests for ShutdownPlanner
 ├─ brand/                   logo kit: SVG masters, .ico, PNGs, guidelines
