@@ -298,7 +298,9 @@ public partial class MainWindow : Window
         Refresh();
     }
 
-    void Back_Click(object sender, RoutedEventArgs e)
+    void Back_Click(object sender, RoutedEventArgs e) => CloseSettings();
+
+    void CloseSettings()
     {
         settingsOpen = false;
         SettingsPanel.Visibility = Visibility.Collapsed;
@@ -324,14 +326,18 @@ public partial class MainWindow : Window
 
     void CloseCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        settings.CloseToTray = CloseCombo.SelectedIndex != 1;
+        var toTray = CloseCombo.SelectedIndex != 1;
+        if (settings.CloseToTray == toTray) return;   // also fires when the page opens
+        settings.CloseToTray = toTray;
         settings.Save();
     }
 
     void WarnCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (WarnCombo.SelectedIndex < 0) return;
-        settings.WarnMinutes = Settings.WarnChoices[WarnCombo.SelectedIndex];
+        var minutes = Settings.WarnChoices[WarnCombo.SelectedIndex];
+        if (settings.WarnMinutes == minutes) return;   // also fires when the page opens
+        settings.WarnMinutes = minutes;
         settings.Save();
     }
 
@@ -433,6 +439,7 @@ public partial class MainWindow : Window
     void WarnShortly(DateTime due)
     {
         warned = true;
+        CloseSettings();   // the warning and its Snooze live on the main view
         WarningText.Text = $"Your PC shuts down at {Clock(due)}. Save your work, or snooze it for {ShutdownPlanner.Snooze.TotalMinutes:0} minutes.";
         WarningBar.Visibility = Visibility.Visible;
         ShowFromTray();
@@ -478,6 +485,7 @@ public partial class MainWindow : Window
                 ShutdownCommand.Schedule(plan.Delay, soon);
                 lateFor ??= target;
                 WarningBar.Visibility = Visibility.Collapsed;   // the late-shutdown status replaces it
+                CloseSettings();
                 scheduledAt = soon;
                 scheduledFrom = now;
                 SaveState();
