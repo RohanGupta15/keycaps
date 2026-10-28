@@ -10,10 +10,11 @@ sealed class TrayIcon : IDisposable
     readonly Forms.NotifyIcon icon;
     readonly Forms.ToolStripItem skipItem, cancelItem, exitItem;
 
-    public TrayIcon(Action open, Action cancelShutdown, Action skipNext, Action exit)
+    public TrayIcon(Action open, Action openSettings, Action cancelShutdown, Action skipNext, Action exit)
     {
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Open Shutdown Timer", null, (_, _) => open());
+        menu.Items.Add("Settings", null, (_, _) => openSettings());
         skipItem = menu.Items.Add("Skip next shutdown", null, (_, _) => skipNext());
         skipItem.Visible = false;
         cancelItem = menu.Items.Add("Cancel shutdown", null, (_, _) => cancelShutdown());

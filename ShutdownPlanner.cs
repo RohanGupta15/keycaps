@@ -28,9 +28,6 @@ public static class ShutdownPlanner
     /// <summary>Warning given before a late shutdown, so the user can cancel it.</summary>
     public static readonly TimeSpan Warning = TimeSpan.FromSeconds(60);
 
-    /// <summary>How long before a shutdown the app warns, with Cancel and Snooze.</summary>
-    public static readonly TimeSpan HeadsUp = TimeSpan.FromMinutes(5);
-
     public static readonly TimeSpan Snooze = TimeSpan.FromMinutes(15);
 
     /// <summary>Repeat days as a bit mask: bit n is <see cref="DayOfWeek"/> n. 0 means once.</summary>

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -29,6 +30,8 @@ public partial class MainWindow : Window
     readonly DispatcherTimer tick = new() { Interval = TimeSpan.FromSeconds(1) };
     readonly KeepAwake keepAwake = new();
     readonly TrayIcon tray;
+    readonly Settings settings = Settings.Load();
+    bool settingsOpen;
 
     int hour12 = 3;   // 1..12
     int minute;       // 0..59
@@ -46,7 +49,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        tray = new TrayIcon(ShowFromTray, CancelShutdown, SkipNext, ExitApp);
+        tray = new TrayIcon(ShowFromTray, OpenSettings, CancelShutdown, SkipNext, ExitApp);
 
         tick.Tick += (_, _) => OnTick();
         tick.Start();
@@ -219,7 +222,7 @@ public partial class MainWindow : Window
         else if (scheduledAt is { } at && DateTime.Now - at > TimeSpan.FromSeconds(15))
             Resync();
         else if (scheduledAt is { } due && !warned && lateFor is null
-                 && due > DateTime.Now && due - DateTime.Now <= ShutdownPlanner.HeadsUp)
+                 && due > DateTime.Now && due - DateTime.Now <= HeadsUp)
             WarnShortly(due);
 
         Refresh();
@@ -272,7 +275,68 @@ public partial class MainWindow : Window
             IdlePanel.Visibility = Visibility.Visible;
             ScheduledPanel.Visibility = Visibility.Collapsed;
         }
+        if (settingsOpen)
+            IdlePanel.Visibility = ScheduledPanel.Visibility = Visibility.Collapsed;
     }
+
+    // ---------- Settings ----------
+
+    /// <summary>A warning time of Off (0) never fires: a target is never 0 minutes or less ahead and still in the future.</summary>
+    TimeSpan HeadsUp => TimeSpan.FromMinutes(settings.WarnMinutes);
+
+    void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings();
+
+    void OpenSettings()
+    {
+        ShowFromTray();
+        settingsOpen = true;
+        SyncAutoStartCheck();
+        CloseCombo.SelectedIndex = settings.CloseToTray ? 0 : 1;
+        WarnCombo.SelectedIndex = Array.IndexOf(Settings.WarnChoices, settings.WarnMinutes);
+        VersionText.Text = $"Version {typeof(MainWindow).Assembly.GetName().Version?.ToString(3)}";
+        SettingsPanel.Visibility = Visibility.Visible;
+        Refresh();
+    }
+
+    void Back_Click(object sender, RoutedEventArgs e)
+    {
+        settingsOpen = false;
+        SettingsPanel.Visibility = Visibility.Collapsed;
+        RefreshAutoStartBar();
+        Refresh();
+    }
+
+    void SyncAutoStartCheck()
+    {
+        AutoStartCheck.IsEnabled = AutoStart.Available;
+        AutoStartCheck.IsChecked = AutoStart.Enabled;
+        AutoStartNote.Text = !AutoStart.Available ? "Not available in --dry-run."
+            : AutoStart.DisabledInTaskManager ? "Turned off in Task Manager. Turn it on here to start again."
+            : "Starts quietly in the tray. Needed for repeating shutdowns.";
+    }
+
+    void AutoStartCheck_Click(object sender, RoutedEventArgs e)
+    {
+        try { AutoStart.Set(AutoStartCheck.IsChecked == true); }
+        catch (Exception ex) when (AutoStart.IsRegistryFailure(ex)) { }
+        SyncAutoStartCheck();   // shows what Windows actually has
+    }
+
+    void CloseCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        settings.CloseToTray = CloseCombo.SelectedIndex != 1;
+        settings.Save();
+    }
+
+    void WarnCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (WarnCombo.SelectedIndex < 0) return;
+        settings.WarnMinutes = Settings.WarnChoices[WarnCombo.SelectedIndex];
+        settings.Save();
+    }
+
+    void GitHub_Click(object sender, RoutedEventArgs e) =>
+        Process.Start(new ProcessStartInfo("https://github.com/RohanGupta15/keycaps") { UseShellExecute = true });
 
     void SetAwakeStatus(string glyph, string text, bool caution)
     {
@@ -336,7 +400,7 @@ public partial class MainWindow : Window
         scheduledAt = target;
         scheduledFrom = now;
         lateFor = null;
-        warned = target - now <= ShutdownPlanner.HeadsUp;   // set this close: the user already knows
+        warned = target - now <= HeadsUp;   // set this close: the user already knows
         WarningBar.Visibility = Visibility.Collapsed;
         SaveState();
         OnScheduleChanged();
@@ -479,8 +543,8 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // Close hides to the tray; only Exit in the tray menu quits. A pending shutdown keeps the PC awake meanwhile.
-        if (!exiting)
+        // Close hides to the tray unless set to quit. A pending shutdown always stays in the tray to keep the PC awake.
+        if (!exiting && (settings.CloseToTray || scheduledAt is not null))
         {
             e.Cancel = true;
             HideToTray();
